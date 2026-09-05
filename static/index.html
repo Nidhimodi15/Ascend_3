@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>KillPoint — Crash-Consistency Verification Platform</title>
+  <meta name="description" content="KillPoint: A bounded crash-point recovery verification engine for embedded storage with production-inspired security layer." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/css/style.css" />
+</head>
+<body>
+
+  <!-- ════════════════════════════════════════════════════════
+       PROFESSIONAL HEADER
+  ════════════════════════════════════════════════════════ -->
+  <header class="header" role="banner">
+    <div class="header-brand">
+      <div class="header-logo-icon">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+        </svg>
+      </div>
+      <div>
+        <div class="header-logo-wrap">
+          <h1 class="header-logo">KILL<span>POINT</span></h1>
+          <span class="header-platform-tag">Crash-Consistency Verification Platform</span>
+        </div>
+        <div class="header-subtitle">Bounded crash-point verification • 12 declared hooks • Deterministic recovery testing</div>
+      </div>
+    </div>
+    
+    <div class="header-right">
+      <div class="header-status-pill" id="system-secure-pill">
+        <span class="badge-dot green"></span>
+        <span id="system-secure-label">SYSTEM SECURE</span>
+      </div>
+      <button class="btn btn-secondary header-auth-btn" id="btn-header-auth">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+        </svg>
+        <span id="header-auth-label">Login</span>
+      </button>
+    </div>
+  </header>
+
+  <main class="main" role="main">
+
+    <!-- ════════════════════════════════════════════════════════
+         EXECUTIVE SUMMARY / KPI CARDS
+  ════════════════════════════════════════════════════════ -->
+    <div class="stats-row">
+      <div class="stat-card">
+        <div class="stat-header">
+          <span class="stat-label">HOOKS TESTED</span>
+          <span class="stat-icon-svg">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2v7.31L4.75 19.9A2 2 0 0 0 6.5 23h11a2 2 0 0 0 1.75-3.1L14 9.31V2"/><path d="M8.5 2h7"/></svg>
+          </span>
+        </div>
+        <div class="stat-value" id="stat-tested">–</div>
+        <div class="stat-sub">of 12 declared crash hooks</div>
+        <div class="progress-bar-wrap">
+          <div class="progress-bar-fill" id="progress-fill"></div>
+        </div>
+      </div>
+
+      <div class="stat-card safe">
+        <div class="stat-header">
+          <span class="stat-label">SAFE HOOKS</span>
+          <span class="stat-icon-svg safe">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+          </span>
+        </div>
+        <div class="stat-value safe" id="stat-safe">–</div>
+        <div class="stat-sub">all 4 invariants satisfied</div>
+      </div>
+
+      <div class="stat-card bug">
+        <div class="stat-header">
+          <span class="stat-label">BUGS DISCOVERED</span>
+          <span class="stat-icon-svg bug">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          </span>
+        </div>
+        <div class="stat-value bug" id="stat-bugs">–</div>
+        <div class="stat-sub">invariant violations detected</div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-header">
+          <span class="stat-label">DECLARED COVERAGE</span>
+          <span class="stat-icon-svg">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+          </span>
+        </div>
+        <div class="stat-value" id="stat-coverage">–</div>
+        <div class="stat-sub" id="stat-strategy">Strategy: NAIVE</div>
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════════════════════════
+         VERIFICATION CONTROL CENTER
+  ════════════════════════════════════════════════════════ -->
+    <section class="card" aria-labelledby="control-title">
+      <div class="section-header-bar">
+        <div class="section-title-wrap">
+          <div class="section-title" id="control-title">Verification Control Center</div>
+          <div class="section-subtitle">Execute the same seeded operation across all declared crash points</div>
+        </div>
+        <div class="control-status-badge" id="control-status-badge">READY FOR VERIFICATION</div>
+      </div>
+
+      <div class="control-panel">
+        <!-- Seed Input -->
+        <div class="control-group">
+          <label class="control-label" for="seed-input">Operation Seed</label>
+          <div class="input-with-icon">
+            <span class="input-icon-svg">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></svg>
+            </span>
+            <input
+              id="seed-input"
+              type="number"
+              class="control-input"
+              min="1"
+              value="48291"
+              aria-label="Seed for deterministic operation generation"
+            />
+          </div>
+        </div>
+
+
+        <!-- Strategy Selector -->
+        <div class="control-group">
+          <label class="control-label">Recovery Strategy</label>
+          <div class="strategy-toggle" role="group" aria-label="Recovery strategy selection">
+            <button class="strategy-btn active" data-strategy="naive" id="btn-strategy-naive">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+              </svg>
+              Naive Recovery
+            </button>
+            <button class="strategy-btn" data-strategy="safe" id="btn-strategy-safe">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                <path d="m9 12 2 2 4-4"/>
+              </svg>
+              Safe Recovery
+            </button>
+          </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="btn-group">
+          <button class="btn btn-primary btn-hero" id="btn-run-all" aria-label="Run verification across all 12 crash hooks">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              <polygon points="5 3 19 12 5 21 5 3"/>
+            </svg>
+            ▶ RUN ALL 12 HOOKS
+          </button>
+          <button class="btn btn-secondary" id="btn-compare" aria-label="Compare naive and safe strategies side by side">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><line x1="6" y1="9" x2="6" y2="21"/>
+            </svg>
+            ⇄ COMPARE STRATEGIES
+          </button>
+        </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════════════════
+         AUTONOMOUS ROOT-CAUSE INVESTIGATOR AGENT
+  ════════════════════════════════════════════════════════ -->
+    <section class="card agent-card" aria-labelledby="agent-title">
+      <div class="section-header-bar">
+        <div class="section-title-wrap">
+          <div class="section-title" id="agent-title">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:6px;color:var(--accent-light);">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+              <circle cx="12" cy="16" r="1"></circle>
+            </svg>
+            🤖 KillPoint Autonomous Root-Cause Investigator
+          </div>
+        </div>
+        <div class="control-status-badge" id="agent-status-badge">IDLE</div>
+      </div>
+
+      <div class="agent-controls">
+        <div class="control-group">
+          <label class="control-label" for="agent-hook-select">Initial Crash Point Target</label>
+          <div class="input-with-icon">
+            <span class="input-icon-svg">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12A10 10 0 1 1 12 2a10 10 0 0 1 10 10z"/><path d="M12 6v6l4 2"/></svg>
+            </span>
+            <select id="agent-hook-select" class="control-input" style="min-width: 220px;">
+              <option value="sweep">Auto-Detect / Dynamic Sweep</option>
+              <option value="1">Hook H01 — WAL Header Write</option>
+              <option value="2">Hook H02 — WAL Record Append</option>
+              <option value="3">Hook H03 — WAL Sync/Flush</option>
+              <option value="4">Hook H04 — Data Page Allocation</option>
+              <option value="5">Hook H05 — Data Page Payload Write</option>
+              <option value="6">Hook H06 — Data Page Sync/Flush</option>
+              <option value="7">Hook H07 — Metadata Index Lookup</option>
+              <option value="8">Hook H08 — Metadata Pointer Update</option>
+              <option value="9">Hook H09 — Metadata Page Flush</option>
+              <option value="10" selected>Hook H10 — Commit Marker Prepare</option>
+              <option value="11">Hook H11 — Commit Marker Write</option>
+              <option value="12">Hook H12 — Transaction Finalize</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="btn-group">
+          <button class="btn btn-primary btn-hero agent-start-btn" id="btn-agent-investigate" aria-label="Start autonomous investigation loop">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              <polygon points="5 3 19 12 5 21 5 3"/>
+            </svg>
+            ▶ START AUTONOMOUS INVESTIGATION
+          </button>
+        </div>
+      </div>
+
+      <!-- Agent Activity & Report Container -->
+      <div id="agent-output-container" class="agent-output-container hidden">
+        <div class="agent-split-grid">
+          <!-- Left: Live Reasoning Stream -->
+          <div class="agent-stream-card">
+            <div class="agent-stream-header">
+              <span>Reasoning & Activity Log Stream</span>
+              <span class="tag info" id="agent-experiments-count">0 Experiments</span>
+            </div>
+            <div class="agent-stream-log" id="agent-stream-log" role="log" aria-live="polite"></div>
+          </div>
+
+          <!-- Right: Hypotheses & Root Cause Summary -->
+          <div class="agent-hypotheses-card">
+            <div class="agent-stream-header">
+              <span>Competing Hypotheses Status</span>
+            </div>
+            <div id="agent-hypotheses-list" class="agent-hypotheses-list"></div>
+            <div id="agent-final-report-box" class="agent-final-report-box hidden"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════════════════
+         PHASE RISK OVERVIEW BAR (Dynamic breakdown per phase)
+  ════════════════════════════════════════════════════════ -->
+    <div class="phase-risk-bar hidden" id="phase-risk-overview">
+      <div class="risk-phase-item" id="risk-phase-log">
+        <span class="risk-phase-name">LOG PHASE</span>
+        <span class="risk-phase-badge safe">3/3 Safe</span>
+      </div>
+      <div class="risk-phase-item" id="risk-phase-data">
+        <span class="risk-phase-name">DATA PHASE</span>
+        <span class="risk-phase-badge safe">3/3 Safe</span>
+      </div>
+      <div class="risk-phase-item" id="risk-phase-meta">
+        <span class="risk-phase-name">METADATA PHASE</span>
+        <span class="risk-phase-badge safe">3/3 Safe</span>
+      </div>
+      <div class="risk-phase-item" id="risk-phase-commit">
+        <span class="risk-phase-name">COMMIT PHASE</span>
+        <span class="risk-phase-badge bug">0/3 Safe</span>
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════════════════════════
+         REDESIGNED 12-HOOK AREA (Grouped by Phase)
+  ════════════════════════════════════════════════════════ -->
+    <section class="card" aria-labelledby="grid-title">
+      <div class="section-header-bar">
+        <div class="section-title-wrap">
+          <div class="section-title" id="grid-title">12-Hook Verification Matrix</div>
+          <div class="section-subtitle">Click any hook card to open deep-inspection modal & diagnostic analysis</div>
+        </div>
+      </div>
+
+      <!-- Container where components.js builds phase-grouped sections -->
+      <div id="hook-grid" role="list" aria-label="Crash hook verification results"></div>
+    </section>
+
+    <!-- ════════════════════════════════════════════════════════
+         TRANSACTION TIMELINE
+  ════════════════════════════════════════════════════════ -->
+    <section class="card" aria-labelledby="timeline-title">
+      <div class="section-title" id="timeline-title">Transaction Write Timeline</div>
+      <div class="timeline-wrap">
+        <svg id="timeline-svg" role="img" aria-label="Transaction timeline showing crash injection point"></svg>
+      </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════════════════
+         PERSISTED DISK STATE & INSPECTOR SPLIT PANEL
+  ════════════════════════════════════════════════════════ -->
+    <section class="split-panel">
+
+      <!-- Disk State Viewer -->
+      <div class="card" aria-labelledby="disk-title">
+        <div class="section-title" id="disk-title">Persisted Disk State</div>
+        <div id="disk-regions">
+          <div class="empty-state">
+            <div class="icon">
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="22" y1="12" x2="2" y2="12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><line x1="6" y1="16" x2="6.01" y2="16"/><line x1="10" y1="16" x2="10.01" y2="16"/>
+              </svg>
+            </div>
+            Select a hook card to inspect disk state
+          </div>
+        </div>
+      </div>
+
+      <!-- Inspector / Bug Report -->
+      <div class="card" aria-labelledby="inspector-title">
+        <div class="section-title" id="inspector-title">Invariant Inspector</div>
+
+        <!-- Empty state -->
+        <div id="inspector-empty" class="empty-state">
+          <div class="icon">
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+          </div>
+          Click any hook card to inspect invariant verification details
+        </div>
+
+        <!-- Result panel (hidden until a hook is selected) -->
+        <div id="inspector-panel" class="bug-report-panel hidden">
+          <!-- Verdict banner -->
+          <div id="verdict-banner" class="verdict-banner none">
+            Select a hook
+          </div>
+
+          <!-- Invariants list -->
+          <div class="invariant-list" id="invariant-list" role="list" aria-label="Invariant check results"></div>
+
+          <!-- Bug details box -->
+          <div id="bug-details-box" class="bug-details-box hidden"></div>
+
+          <!-- Reproduce button -->
+          <button
+            class="btn btn-secondary reproduce-btn hidden"
+            id="reproduce-btn"
+            aria-label="Reproduce this bug deterministically"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+            </svg>
+            ↻ REPRODUCE DETERMINISTICALLY
+          </button>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ════════════════════════════════════════════════════════
+         SECURITY & AUDIT PANEL
+  ════════════════════════════════════════════════════════ -->
+    <section class="card" aria-labelledby="sec-title">
+      <div class="section-header-bar">
+        <div class="section-title-wrap">
+          <div class="section-title" id="sec-title">Security & Audit Controls</div>
+          <div class="section-subtitle">Real-time security telemetry & cryptographically authenticated event stream</div>
+        </div>
+      </div>
+
+      <div class="sec-grid">
+        <div class="sec-status-card">
+          <div class="sec-status-item">
+            <span class="sec-label">Authentication:</span>
+            <span class="sec-value safe" id="sec-auth-val">AUTHENTICATED</span>
+          </div>
+          <div class="sec-status-item">
+            <span class="sec-label">AES-256-GCM Payload Encryption:</span>
+            <span class="sec-value safe" id="sec-enc-val">ACTIVE</span>
+          </div>
+          <div class="sec-status-item">
+            <span class="sec-label">Session Protection:</span>
+            <span class="sec-value safe">ACTIVE</span>
+          </div>
+          <div class="sec-status-item">
+            <span class="sec-label">Audit Event Logging:</span>
+            <span class="sec-value safe" id="sec-audit-val">ACTIVE</span>
+          </div>
+          <div class="sec-status-item">
+            <span class="sec-label">Sensitive Data Masking:</span>
+            <span class="sec-value safe">ACTIVE</span>
+          </div>
+        </div>
+
+        <div class="sec-log-card">
+          <div class="sec-log-header">
+            <span>Recent Security Audit Events</span>
+            <span class="tag safe" id="sec-event-count">0 events</span>
+          </div>
+          <div class="sec-log-body" id="sec-audit-events">
+            <div class="empty-state" style="padding:15px;font-size:12px;">No audit events logged yet.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════════════════
+         COMPARISON VIEW (hidden until Compare is clicked)
+  ════════════════════════════════════════════════════════ -->
+    <section class="card hidden" id="compare-section" aria-labelledby="compare-title">
+      <div class="section-title" id="compare-title">Naive vs Safe — Side-by-Side Strategy Comparison</div>
+      <div class="compare-grid">
+        <!-- Naive -->
+        <div class="compare-side">
+          <div class="compare-header">
+            <span class="compare-title naive">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px;">
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+              </svg>
+              Naive Recovery
+            </span>
+            <div>
+              <span class="tag bug" id="compare-bugs-naive">–</span> bugs &nbsp;
+              <span class="tag safe" id="compare-safe-naive">–</span> safe
+            </div>
+          </div>
+          <div class="compare-mini-grid" id="compare-grid-naive"></div>
+        </div>
+
+        <!-- Safe -->
+        <div class="compare-side">
+          <div class="compare-header">
+            <span class="compare-title safe">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px;">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/>
+              </svg>
+              Safe Recovery
+            </span>
+            <div>
+              <span class="tag bug" id="compare-bugs-safe">–</span> bugs &nbsp;
+              <span class="tag safe" id="compare-safe-safe">–</span> safe
+            </div>
+          </div>
+          <div class="compare-mini-grid" id="compare-grid-safe"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════════════════
+         EVENT LOG (terminal style)
+  ════════════════════════════════════════════════════════ -->
+    <section class="card" aria-labelledby="log-title">
+      <div class="section-title" id="log-title">Verification Event Log</div>
+      <div class="event-log" id="event-log" role="log" aria-live="polite" aria-label="Live verification event log"></div>
+    </section>
+
+  </main>
+
+  <!-- ════════════════════════════════════════════════════════
+       INSPECT HOOK MODAL OVERLAY (Premium Redesign)
+  ════════════════════════════════════════════════════════ -->
+  <div class="modal-overlay hidden" id="inspect-modal-overlay" aria-modal="true" role="dialog">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title" id="modal-hook-title">HOOK 10 — BUG ❌</div>
+        <button class="modal-close-btn" id="modal-close-btn" aria-label="Close modal">&times;</button>
+      </div>
+      <div class="modal-body" id="modal-body">
+        <!-- Dynamic content rendered by components.js -->
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary reproduce-btn hidden" id="modal-reproduce-btn">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+          </svg>
+          ↻ REPRODUCE DETERMINISTICALLY
+        </button>
+        <button class="btn btn-primary" id="modal-ok-btn">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════════════════════
+       LOGIN MODAL OVERLAY
+  ════════════════════════════════════════════════════════ -->
+  <div class="modal-overlay hidden" id="login-modal-overlay" aria-modal="true" role="dialog">
+    <div class="modal-card" style="max-width: 420px;">
+      <div class="modal-header">
+        <div class="modal-title">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+          </svg>
+          Security Authentication
+        </div>
+        <button class="modal-close-btn" id="login-close-btn" aria-label="Close login modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <form id="login-form" style="display:flex; flex-direction:column; gap:16px;">
+          <div class="control-group">
+            <label class="control-label" for="login-username">Admin Username</label>
+            <input type="text" id="login-username" class="control-input" value="admin" required />
+          </div>
+          <div class="control-group">
+            <label class="control-label" for="login-password">Admin Password</label>
+            <input type="password" id="login-password" class="control-input" placeholder="Enter admin password" required />
+          </div>
+          <div id="login-error-msg" class="bug-details-box hidden" style="padding:8px 12px;font-size:12px;"></div>
+          <button type="submit" class="btn btn-primary" style="justify-content:center;">Authenticate</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/static/js/app.js"></script>
+</body>
+</html>
