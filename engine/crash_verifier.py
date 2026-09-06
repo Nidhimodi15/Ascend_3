@@ -2,14 +2,20 @@
 Crash Verifier — The Orchestrator.
 
 Runs all 12 crash hooks identically:
-  Fresh disk → Generate op → Execute write → Crash → Recover → Check invariants → Report verdict
+  Fresh disk → [MySQL operation OR seeded operation] → Execute write → Crash → Recover → Check invariants → Report verdict
 
 The verifier has ZERO hardcoded knowledge of which hooks will fail.
 Verdicts are determined entirely by the invariant checker at runtime.
+
+Two input paths (engine logic is identical for both):
+  MYSQL PATH  — caller passes a WriteOperation fetched from MySQL directly.
+  SEED PATH   — caller passes a seed; operation is generated via SeededRandom.
+                Used only by Phase 1–3 tests for backward compatibility.
 """
 from datetime import datetime
+from typing import Optional
 
-from engine.types import HookResult, VerificationReport
+from engine.types import HookResult, VerificationReport, WriteOperation
 from engine.seeded_random import generate_operation
 from engine.simulated_disk import SimulatedDisk
 from engine.storage_engine import execute_write, CrashInjected, HOOK_METADATA
@@ -20,13 +26,17 @@ from app.security.prevention_rules import get_prevention_suggestion
 
 
 
-def run_full_verification(seed: int, strategy: str) -> VerificationReport:
+def run_full_verification(
+    seed: int,
+    strategy: str,
+    operation: Optional[WriteOperation] = None,
+) -> VerificationReport:
     """
     Run the verification engine across all 12 crash hooks.
 
     For each hook N:
       1. Create a fresh simulated disk
-      2. Generate a deterministic operation from the seed
+      2. Use provided WriteOperation (MySQL path) OR generate from seed (test path)
       3. Execute the write path, injecting a crash at hook N
       4. Discard volatile buffers (simulate power loss)
       5. Snapshot the persisted disk state
@@ -36,6 +46,12 @@ def run_full_verification(seed: int, strategy: str) -> VerificationReport:
 
     The verifier discovers whichever hooks violate the invariants at runtime.
     In the reference scenario, Hooks 09–11 demonstrate the naive vulnerability.
+
+    Args:
+        seed: Used ONLY when operation=None (Phase 1–3 test compatibility).
+        strategy: "naive" or "safe" recovery.
+        operation: WriteOperation from MySQL adapter (runtime MySQL path).
+                   If None, falls back to generate_operation(seed) for tests.
     """
     results: list[HookResult] = []
 
@@ -45,13 +61,14 @@ def run_full_verification(seed: int, strategy: str) -> VerificationReport:
         # 1. Fresh disk for every hook — no state bleeds across runs
         disk = SimulatedDisk()
 
-        # 2. Deterministic operation — same seed → same operation every time
-        operation = generate_operation(seed)
+        # 2. MySQL PATH: use actual operation from database.
+        #    SEED PATH (tests only): generate deterministic operation from seed.
+        op = operation if operation is not None else generate_operation(seed)
 
         # 3. Execute write with crash injection
         write_acknowledged = False
         try:
-            execute_write(disk, operation, crash_at=hook_num)
+            execute_write(disk, op, crash_at=hook_num)
             # If we reach here, write completed before crash was triggered
             write_acknowledged = True
         except CrashInjected:
@@ -70,7 +87,7 @@ def run_full_verification(seed: int, strategy: str) -> VerificationReport:
         # 7. Run invariant checker — THIS is where bugs are discovered
         invariants = check_invariants(
             recovered_records=recovered,
-            operation=operation,
+            operation=op,
             disk_snapshot=snapshot,
             write_was_acknowledged=write_acknowledged,
         )
@@ -106,10 +123,18 @@ def run_full_verification(seed: int, strategy: str) -> VerificationReport:
     )
 
 
-def run_single_hook(seed: int, strategy: str, hook: int) -> HookResult:
+def run_single_hook(
+    seed: int,
+    strategy: str,
+    hook: int,
+    operation: Optional[WriteOperation] = None,
+) -> HookResult:
     """
     Run verification for a single hook only.
     Used by the reproduce endpoint to confirm deterministic failure.
+
+    Args:
+        operation: WriteOperation from MySQL (runtime path). If None, uses seed.
     """
-    report = run_full_verification(seed, strategy)
+    report = run_full_verification(seed=seed, strategy=strategy, operation=operation)
     return report.results[hook - 1]

@@ -97,37 +97,40 @@
       </div>
     </div>
 
+    <!-- Hidden MySQL status placeholders for compatibility -->
+    <div style="display:none;" aria-hidden="true">
+      <span id="mysql-status-badge"></span>
+      <span id="mysql-conn-val"></span>
+      <span id="mysql-db-val"></span>
+      <span id="mysql-count-val"></span>
+      <span id="mysql-table-val"></span>
+      <div id="mysql-seed-notice"></div>
+    </div>
+
     <!-- ════════════════════════════════════════════════════════
          VERIFICATION CONTROL CENTER
-  ════════════════════════════════════════════════════════ -->
+    ════════════════════════════════════════════════════════ -->
     <section class="card" aria-labelledby="control-title">
       <div class="section-header-bar">
         <div class="section-title-wrap">
           <div class="section-title" id="control-title">Verification Control Center</div>
-          <div class="section-subtitle">Execute the same seeded operation across all declared crash points</div>
         </div>
         <div class="control-status-badge" id="control-status-badge">READY FOR VERIFICATION</div>
       </div>
 
       <div class="control-panel">
-        <!-- Seed Input -->
-        <div class="control-group">
-          <label class="control-label" for="seed-input">Operation Seed</label>
-          <div class="input-with-icon">
-            <span class="input-icon-svg">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></svg>
-            </span>
-            <input
-              id="seed-input"
-              type="number"
-              class="control-input"
-              min="1"
-              value="48291"
-              aria-label="Seed for deterministic operation generation"
-            />
+
+        <!-- Transaction Selector -->
+        <div class="control-group" style="flex: 1.2; min-width: 260px;">
+          <label class="control-label" for="mysql-txn-select">
+            Transaction
+          </label>
+          <div class="input-with-icon" style="width: 100%;">
+            <select id="mysql-txn-select" class="control-input" style="width: 100%; padding: 9px 12px; cursor: pointer; font-family: var(--font-mono); font-size: 12px; background: var(--bg-elevated); color: var(--text-primary); border-color: var(--border-medium);" aria-label="Select transaction">
+              <option value="">Loading transactions...</option>
+            </select>
           </div>
         </div>
-
 
         <!-- Strategy Selector -->
         <div class="control-group">
@@ -165,6 +168,12 @@
             ⇄ COMPARE STRATEGIES
           </button>
         </div>
+      </div>
+
+      <!-- Selected Transaction Details Preview -->
+      <div id="mysql-txn-info" class="mysql-txn-info" style="margin-top: 14px; padding: 10px 14px; border-radius: var(--radius-sm); font-size: 12px; display: flex; flex-wrap: wrap; gap: 16px; align-items: center;">
+        <!-- Filled dynamically on transaction selection -->
+      </div>
     </section>
 
     <!-- ════════════════════════════════════════════════════════

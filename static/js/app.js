@@ -1,7 +1,12 @@
 /**
  * app.js — Main dashboard controller & Security Layer Integrator.
  * Binds buttons, manages state, handles Auth & Audit logs,
- * and orchestrates API → render → animate pipeline.
+ * and orchestrates MySQL → WriteOperation → API → render pipeline.
+ *
+ * RUNTIME DATA FLOW:
+ *   MySQL DB → fetch transactions → user selects txn_id
+ *   → POST /run-all {txn_id} → backend fetches from MySQL
+ *   → WriteOperation → 12 hooks → Recovery → Invariants → Agent
  */
 
 import {
@@ -18,10 +23,11 @@ import { renderTimeline, resetTimeline } from './timeline.js';
 import { logEvent, clearLog, animateCounter, shake } from './animations.js';
 
 // ─── State ───────────────────────────────────────────────────────────────────
-let currentReport   = null;
-let currentSeed     = 48291;
-let currentStrategy = 'naive';
-let currentUser     = null;
+let currentReport    = null;
+let currentTxnId     = null;   // Selected MySQL transaction ID (e.g. "T101")
+let currentStrategy  = 'naive';
+let currentUser      = null;
+let mysqlTransactions = [];    // Cache of fetched MySQL transactions
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
@@ -30,36 +36,130 @@ document.addEventListener('DOMContentLoaded', () => {
   bindAuthControls();
   renderHookGrid(null, () => {});
   resetTimeline();
-  logEvent(null, 'KillPoint Verifier ready. Select a seed and strategy, then run.', 'info');
-  
+  logEvent(null, 'KillPoint Verifier ready.', 'info');
+
+  // Load MySQL transactions silently in background (no visible panel)
+  loadMySQLTransactions();
+
   // Auto-check auth & security panel status
   refreshSecurityAudit();
 });
 
+// ─── MySQL Status Panel ───────────────────────────────────────────────────────
+
+async function loadMySQLStatus() {
+  const badge   = document.getElementById('mysql-status-badge');
+  const connVal = document.getElementById('mysql-conn-val');
+  const dbVal   = document.getElementById('mysql-db-val');
+  const cntVal  = document.getElementById('mysql-count-val');
+  const tblVal  = document.getElementById('mysql-table-val');
+
+  try {
+    const status = await API.mysqlStatus();
+
+    if (status.connected) {
+      if (badge)   { badge.textContent = 'CONNECTED'; badge.className = 'control-status-badge safe'; }
+      if (connVal) { connVal.textContent = `✓ Connected  (${status.host})`; connVal.className = 'mysql-status-val connected'; }
+      if (dbVal)   { dbVal.textContent = status.database; }
+      if (cntVal)  { cntVal.textContent = `${status.row_count} transaction(s)`; }
+      if (tblVal)  { tblVal.textContent = status.table; }
+    } else {
+      renderMySQLError(status.error);
+    }
+  } catch (err) {
+    renderMySQLError(err.message);
+  }
+}
+
+function renderMySQLError(msg) {
+  const badge   = document.getElementById('mysql-status-badge');
+  const connVal = document.getElementById('mysql-conn-val');
+  const notice  = document.getElementById('mysql-seed-notice');
+  const select  = document.getElementById('mysql-txn-select');
+
+  if (badge)   { badge.textContent = 'DISCONNECTED'; badge.className = 'control-status-badge bug'; }
+  if (connVal) { connVal.textContent = `✗ Error — ${msg}`; connVal.className = 'mysql-status-val disconnected'; }
+  if (notice)  { notice.classList.remove('hidden'); notice.innerHTML = `⚠ MySQL connection failed. <br>Make sure MySQL is running and run: <code>python scripts/seed_mysql.py</code>`; }
+  if (select)  { select.innerHTML = '<option value="">— MySQL unavailable —</option>'; }
+  logEvent(null, `MySQL connection failed: ${msg}`, 'bug');
+}
+
+async function loadMySQLTransactions() {
+  const select  = document.getElementById('mysql-txn-select');
+  const infoBox = document.getElementById('mysql-txn-info');
+
+  try {
+    const data = await API.mysqlTransactions();
+    mysqlTransactions = data.transactions || [];
+
+    if (!select) return;
+
+    if (mysqlTransactions.length === 0) {
+      select.innerHTML = '<option value="">No transactions found in MySQL database</option>';
+      if (infoBox) infoBox.innerHTML = '<span style="color:var(--warning);">No records found in MySQL. Please run python scripts/seed_mysql.py.</span>';
+      return;
+    }
+
+    select.innerHTML = '';
+    mysqlTransactions.forEach(txn => {
+      const opt = document.createElement('option');
+      opt.value = txn.txn_id;
+      opt.textContent = `${txn.txn_id}: SET "${txn.acct_key}" = ${txn.value} (Ver: ${txn.version})`;
+      select.appendChild(opt);
+    });
+
+    // Auto-select first transaction
+    select.value = mysqlTransactions[0].txn_id;
+    onTransactionSelected();
+    logEvent(null, `Loaded ${mysqlTransactions.length} transactions. Active: ${mysqlTransactions[0].txn_id}`, 'safe');
+
+  } catch (err) {
+    if (select) {
+      select.innerHTML = `<option value="">Error loading transactions: ${err.message}</option>`;
+    }
+  }
+}
+
+
+function onTransactionSelected() {
+  const select   = document.getElementById('mysql-txn-select');
+  const infoBox  = document.getElementById('mysql-txn-info');
+
+  if (!select || !select.value) {
+    currentTxnId = null;
+    if (infoBox) infoBox.innerHTML = '<span style="color:var(--text-muted);">No transaction selected</span>';
+    return;
+  }
+
+  currentTxnId = select.value;
+  const txn = mysqlTransactions.find(t => t.txn_id === currentTxnId);
+
+  if (infoBox && txn) {
+    infoBox.innerHTML = `
+      <div class="txn-field"><span class="txn-key" style="color:var(--text-muted);font-weight:600;">Transaction:</span> <span class="txn-val" style="color:var(--accent-light);font-weight:700;">${txn.txn_id}</span></div>
+      <div class="txn-field"><span class="txn-key" style="color:var(--text-muted);">Account Key:</span> <span class="txn-val" style="color:var(--text-primary);font-weight:600;">${txn.acct_key}</span></div>
+      <div class="txn-field"><span class="txn-key" style="color:var(--text-muted);">Operation:</span> <span class="txn-val" style="color:var(--safe);font-weight:700;">SET</span></div>
+      <div class="txn-field"><span class="txn-key" style="color:var(--text-muted);">New Value:</span> <span class="txn-val" style="color:#38bdf8;font-weight:600;">${txn.value}</span></div>
+      <div class="txn-field"><span class="txn-key" style="color:var(--text-muted);">Old Value:</span> <span class="txn-val" style="color:var(--text-muted);">${txn.old_value !== null ? txn.old_value : 'null'}</span></div>
+      <div class="txn-field"><span class="txn-key" style="color:var(--text-muted);">Version:</span> <span class="txn-val" style="color:var(--text-secondary);">${txn.version}</span></div>
+    `;
+    infoBox.classList.remove('hidden');
+  }
+}
+
+
 // ─── Control Bindings ─────────────────────────────────────────────────────────
 function bindControls() {
-  // Seed input
-  const seedInput = document.getElementById('seed-input');
-  seedInput.value = currentSeed;
-  seedInput.addEventListener('change', () => {
-    const v = parseInt(seedInput.value, 10);
-    if (!isNaN(v) && v > 0) {
-      currentSeed = v;
-    } else {
-      seedInput.value = currentSeed;
-      shake(seedInput);
-    }
-  });
-
   // Strategy toggle
   document.querySelectorAll('.strategy-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.strategy-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       currentStrategy = btn.dataset.strategy;
-      document.getElementById('stat-strategy').textContent = currentStrategy.toUpperCase();
+      const stratEl = document.getElementById('stat-strategy');
+      if (stratEl) stratEl.textContent = currentStrategy.toUpperCase();
 
-      // Clear previous verification results and close modal on strategy switch
+      // Clear previous results on strategy switch
       currentReport = null;
       closeInspectModal();
       resetStats();
@@ -68,9 +168,20 @@ function bindControls() {
       resetTimeline();
       renderHookGrid(null, () => {});
       clearLog();
-      logEvent(null, `Strategy set to '${currentStrategy.toUpperCase()}'. Run verification to execute backend engine.`, 'info');
+      logEvent(null, `Strategy set to '${currentStrategy.toUpperCase()}'. Ready to verify.`, 'info');
     });
   });
+
+  // Admin Transaction Selector change listener
+  const txnSelect = document.getElementById('mysql-txn-select');
+  if (txnSelect) {
+    txnSelect.addEventListener('change', () => {
+      onTransactionSelected();
+      if (currentTxnId) {
+        logEvent(null, `Selected transaction: ${currentTxnId}. Ready to verify.`, 'info');
+      }
+    });
+  }
 
   // Run all
   document.getElementById('btn-run-all').addEventListener('click', onRunAll);
@@ -116,10 +227,10 @@ function bindAuthControls() {
 }
 
 function openLoginModal() {
-  const modal = document.getElementById('login-modal-overlay');
+  const modal  = document.getElementById('login-modal-overlay');
   const errMsg = document.getElementById('login-error-msg');
   if (errMsg) errMsg.classList.add('hidden');
-  if (modal) modal.classList.remove('hidden');
+  if (modal)  modal.classList.remove('hidden');
 }
 
 function closeLoginModal() {
@@ -184,7 +295,7 @@ async function refreshSecurityAudit() {
     if (statusData) {
       const encVal   = document.getElementById('sec-enc-val');
       const auditVal = document.getElementById('sec-audit-val');
-      if (encVal) encVal.textContent = `${statusData.encryption.algorithm} (Active)`;
+      if (encVal)   encVal.textContent   = `${statusData.encryption.algorithm} (Active)`;
       if (auditVal) auditVal.textContent = `Active (${statusData.audit_logging.total_events} events)`;
     }
 
@@ -200,8 +311,8 @@ async function refreshSecurityAudit() {
 }
 
 function renderAuditLogs(events) {
-  const container  = document.getElementById('sec-audit-events');
-  const countTag   = document.getElementById('sec-event-count');
+  const container = document.getElementById('sec-audit-events');
+  const countTag  = document.getElementById('sec-event-count');
   if (!container) return;
 
   if (countTag) countTag.textContent = `${events.length} event(s)`;
@@ -228,8 +339,14 @@ function renderAuditLogs(events) {
   });
 }
 
-// ─── Run All 12 Hooks ─────────────────────────────────────────────────────────
+// ─── Run All 12 Hooks — Transaction Path ─────────────────────────────────────
 async function onRunAll() {
+  if (!currentTxnId) {
+    // If no transaction loaded yet, wait silently
+    logEvent(null, 'Loading transaction data, please try again...', 'info');
+    return;
+  }
+
   const btn = document.getElementById('btn-run-all');
   setLoading(btn, true);
   closeInspectModal();
@@ -238,46 +355,37 @@ async function onRunAll() {
   hideComparison();
   resetStats();
 
-  logEvent(null, `Starting verification: seed=${currentSeed}, strategy=${currentStrategy}`, 'info');
+  logEvent(null, `Starting verification: transaction=${currentTxnId}, strategy=${currentStrategy.toUpperCase()}`, 'info');
 
-  // Pipeline step visual feedback
   setPipelineStep(3);
 
   try {
-    const report = await API.runAll(currentSeed, currentStrategy);
+    // Send txn_id → backend fetches from DB → WriteOperation → engine
+    const report = await API.runAll(currentTxnId, currentStrategy);
     currentReport = report;
 
-    // Build verdicts map for timeline
     const verdicts = {};
     report.results.forEach(r => { verdicts[r.hook] = r.verdict; });
 
-    // Render grid
     renderHookGrid(report.results, onHookSelected);
-
-    // Render stats
     renderStats(report);
 
-    // Animate counters
     animateCounter(document.getElementById('stat-safe'), report.total_safe);
     animateCounter(document.getElementById('stat-bugs'), report.total_bugs);
 
-    // Complete pipeline step
     setPipelineStep(5);
-
-    // Reset timeline (no specific hook selected yet)
     renderTimeline(null, verdicts);
 
-    // Log each result
     report.results.forEach(r => {
       const type = r.verdict === 'BUG' ? 'bug' : 'safe';
       const msg  = r.verdict === 'BUG'
-        ? `[BUG DISCOVERED] — ${r.step_description} → ${r.bug_details || 'Invariant failure'}`
-        : `[SAFE] — ${r.step_description}`;
+        ? `[BUG] Hook ${r.hook} (${r.step_description}): ${r.violations.join(', ')}`
+        : `[PASS] Hook ${r.hook} (${r.step_description}): all invariants satisfied`;
       logEvent(r.hook, msg, type);
     });
 
     logEvent(null,
-      `Verification complete. ${report.total_bugs} bug(s) discovered out of 12 hooks.`,
+      `Verification complete: ${report.total_safe} safe, ${report.total_bugs} bugs discovered.`,
       report.total_bugs > 0 ? 'bug' : 'safe'
     );
 
@@ -302,18 +410,12 @@ function setPipelineStep(stepNum) {
   }
 }
 
-
 // ─── Hook Card Selected ───────────────────────────────────────────────────────
 function onHookSelected(result) {
-  // Update timeline to show crash point
   const verdicts = {};
   currentReport.results.forEach(r => { verdicts[r.hook] = r.verdict; });
   renderTimeline(result.hook, verdicts);
-
-  // Render inspector panel
   renderInspector(result, onReproduce);
-
-  // Open "Why BUG? / Inspect" Modal Panel with dynamic backend data
   openInspectModal(result, currentStrategy, onReproduce);
 
   logEvent(result.hook,
@@ -322,14 +424,14 @@ function onHookSelected(result) {
   );
 }
 
-// ─── Reproduce ────────────────────────────────────────────────────────────────
+// ─── Reproduce Path ───────────────────────────────────────────────────────────
 async function onReproduce(hookNum) {
   const btn = document.getElementById('reproduce-btn');
   setLoading(btn, true);
-  logEvent(hookNum, `Reproducing deterministically with seed=${currentSeed}...`, 'info');
+  logEvent(hookNum, `Reproducing deterministically [Txn:${currentTxnId}] hook ${hookNum}...`, 'info');
 
   try {
-    const res = await API.reproduce(currentSeed, hookNum, currentStrategy);
+    const res = await API.reproduce(currentTxnId, hookNum, currentStrategy);
     if (res.reproducible) {
       logEvent(hookNum,
         `[REPRODUCED] Verdict: ${res.result.verdict} — identical to original run.`,
@@ -344,26 +446,28 @@ async function onReproduce(hookNum) {
   }
 }
 
-// ─── Compare ─────────────────────────────────────────────────────────────────
+// ─── Compare Path ─────────────────────────────────────────────────────────────
 async function onCompare() {
+  if (!currentTxnId) {
+    logEvent(null, 'Loading transaction data, please try again...', 'info');
+    return;
+  }
+
   const btn = document.getElementById('btn-compare');
   setLoading(btn, true);
   clearLog();
   closeInspectModal();
-  logEvent(null, `Comparing naive vs safe recovery with seed=${currentSeed}...`, 'info');
+  logEvent(null, `Comparing naive vs safe recovery [Txn:${currentTxnId}]...`, 'info');
 
   try {
-    const data = await API.compare(currentSeed);
+    const data = await API.compare(currentTxnId);
     renderComparison(data.naive, data.safe);
 
     logEvent(null,
-      `Naive: ${data.naive.total_bugs} bug(s) | Safe: ${data.safe.total_bugs} bug(s)`,
+      `Naive: ${data.naive.total_bugs} bug(s) | Safe: ${data.safe.total_bugs} bug(s) [Txn:${currentTxnId}]`,
       data.naive.total_bugs > 0 ? 'bug' : 'safe'
     );
-    logEvent(null,
-      'The verifier discovered whichever hooks violate invariants at runtime.',
-      'info'
-    );
+    logEvent(null, 'The verifier discovered whichever hooks violate invariants at runtime.', 'info');
     refreshSecurityAudit();
   } catch (err) {
     logEvent(null, `Compare error: ${err.message}`, 'bug');
@@ -373,19 +477,24 @@ async function onCompare() {
   }
 }
 
-// ─── Autonomous Root-Cause Investigator ──────────────────────────────────────
+// ─── Autonomous Root-Cause Investigator Path ──────────────────────────────────
 async function onStartInvestigation() {
-  const btn = document.getElementById('btn-agent-investigate');
+  if (!currentTxnId) {
+    logEvent(null, 'Loading transaction data, please try again...', 'info');
+    return;
+  }
+
+  const btn        = document.getElementById('btn-agent-investigate');
   const hookSelect = document.getElementById('agent-hook-select');
-  const initialHookVal = hookSelect ? hookSelect.value : '10';
+  const hookVal    = hookSelect ? hookSelect.value : 'sweep';
 
   let initialHook = null;
-  if (initialHookVal !== 'sweep') {
-    initialHook = parseInt(initialHookVal, 10);
+  if (hookVal !== 'sweep') {
+    initialHook = parseInt(hookVal, 10);
   }
 
   setLoading(btn, true);
-  logEvent(null, `Starting Autonomous Root-Cause Investigation loop with seed=${currentSeed}, target_hook=${initialHook || 'auto'}...`, 'info');
+  logEvent(null, `Starting Autonomous Investigation [MySQL:${currentTxnId}], target_hook=${initialHook || 'auto'}...`, 'info');
 
   const statusBadge = document.getElementById('agent-status-badge');
   if (statusBadge) {
@@ -394,11 +503,11 @@ async function onStartInvestigation() {
   }
 
   try {
-    const report = await API.investigate(currentSeed, currentStrategy, initialHook);
+    const report = await API.investigate(currentTxnId, currentStrategy, initialHook);
     renderAgentReport(report);
 
     logEvent(null,
-      `Autonomous Investigation completed with ${report.confidence} confidence. Root Cause: ${report.root_cause_confirmed ? 'CONFIRMED' : 'NOT CONFIRMED'}.`,
+      `Autonomous Investigation completed [MySQL:${currentTxnId}]. Root Cause: ${report.root_cause_confirmed ? 'CONFIRMED' : 'NOT CONFIRMED'}.`,
       report.root_cause_confirmed ? 'bug' : 'safe'
     );
     refreshSecurityAudit();
@@ -412,6 +521,7 @@ async function onStartInvestigation() {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function setLoading(btn, loading) {
+  if (!btn) return;
   btn.disabled = loading;
   if (loading) {
     btn._original = btn.innerHTML;
@@ -420,4 +530,3 @@ function setLoading(btn, loading) {
     btn.innerHTML = btn._original || btn.innerHTML;
   }
 }
-

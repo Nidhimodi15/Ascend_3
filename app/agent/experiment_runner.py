@@ -13,16 +13,19 @@ from app.security.prevention_rules import get_prevention_suggestion
 from app.agent.fingerprint import create_failure_fingerprint
 
 
-def execute_experiment(experiment: Dict[str, Any], seed: int, strategy: str = "naive") -> Dict[str, Any]:
+def execute_experiment(experiment: Dict[str, Any], seed: int, strategy: str = "naive", operation=None) -> Dict[str, Any]:
     """
     Execute the specified experiment and return empirical evidence.
+
+    Args:
+        operation: WriteOperation from MySQL (runtime path). If None, uses seed.
     """
     exp_type = experiment["experiment_type"]
     target_hook = experiment["target_hook"]
 
     if exp_type == "COMPARE_RECOVERY_STRATEGIES":
-        naive_res = run_single_hook(seed=seed, strategy="naive", hook=target_hook)
-        safe_res  = run_single_hook(seed=seed, strategy="safe", hook=target_hook)
+        naive_res = run_single_hook(seed=seed, strategy="naive", hook=target_hook, operation=operation)
+        safe_res  = run_single_hook(seed=seed, strategy="safe",  hook=target_hook, operation=operation)
         
         naive_fp = create_failure_fingerprint(naive_res)
         safe_fp  = create_failure_fingerprint(safe_res)
@@ -39,7 +42,7 @@ def execute_experiment(experiment: Dict[str, Any], seed: int, strategy: str = "n
         }
 
     elif exp_type == "COMPARE_NEIGHBORING_HOOK":
-        res = run_single_hook(seed=seed, strategy=strategy, hook=target_hook)
+        res = run_single_hook(seed=seed, strategy=strategy, hook=target_hook, operation=operation)
         fp  = create_failure_fingerprint(res)
         return {
             "experiment_type": exp_type,
@@ -51,7 +54,7 @@ def execute_experiment(experiment: Dict[str, Any], seed: int, strategy: str = "n
         }
 
     elif exp_type == "VERIFY_PREVENTION_RULE":
-        res = run_single_hook(seed=seed, strategy=strategy, hook=target_hook)
+        res = run_single_hook(seed=seed, strategy=strategy, hook=target_hook, operation=operation)
         sug = get_prevention_suggestion(res.invariants, res.disk_snapshot, res.recovered_records)
         return {
             "experiment_type": exp_type,
@@ -61,8 +64,8 @@ def execute_experiment(experiment: Dict[str, Any], seed: int, strategy: str = "n
         }
 
     elif exp_type == "REPLAY_SAME_SEED":
-        res1 = run_single_hook(seed=seed, strategy=strategy, hook=target_hook)
-        res2 = run_single_hook(seed=seed, strategy=strategy, hook=target_hook)
+        res1 = run_single_hook(seed=seed, strategy=strategy, hook=target_hook, operation=operation)
+        res2 = run_single_hook(seed=seed, strategy=strategy, hook=target_hook, operation=operation)
         fp1  = create_failure_fingerprint(res1)
         fp2  = create_failure_fingerprint(res2)
         reproducible = (res1.verdict == res2.verdict and fp1["hash"] == fp2["hash"])
@@ -74,7 +77,7 @@ def execute_experiment(experiment: Dict[str, Any], seed: int, strategy: str = "n
         }
 
     # Default fallback
-    res = run_single_hook(seed=seed, strategy=strategy, hook=target_hook)
+    res = run_single_hook(seed=seed, strategy=strategy, hook=target_hook, operation=operation)
     fp  = create_failure_fingerprint(res)
     return {
         "experiment_type": exp_type,

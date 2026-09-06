@@ -33,9 +33,14 @@ class AutonomousInvestigationAgent:
     def __init__(self, max_experiments: int = 20):
         self.max_experiments = max_experiments
 
-    def investigate(self, seed: int = 42, strategy: str = "naive", initial_hook: Optional[int] = None) -> Dict[str, Any]:
+    def investigate(self, seed: int = 42, strategy: str = "naive", initial_hook: Optional[int] = None, operation=None) -> Dict[str, Any]:
         """
-        Run the autonomous investigation loop for a given seed and strategy.
+        Run the autonomous investigation loop.
+
+        Args:
+            seed: Used only when operation=None (Phase 1-3 test compatibility).
+            strategy: 'naive' or 'safe' recovery.
+            operation: WriteOperation from MySQL (runtime path). If None, uses seed.
         """
         investigation_id = f"inv_{uuid.uuid4().hex[:8]}"
 
@@ -46,14 +51,14 @@ class AutonomousInvestigationAgent:
         # If user chose 'Auto Sweep' (initial_hook is None), scan to find first BUG hook.
         if initial_hook is not None:
             target_hook = initial_hook
-            obs_res = run_single_hook(seed=seed, strategy=strategy, hook=target_hook)
+            obs_res = run_single_hook(seed=seed, strategy=strategy, hook=target_hook, operation=operation)
         else:
             # Auto Sweep mode: default to H11 or scan for first BUG hook
             target_hook = 11
-            obs_res = run_single_hook(seed=seed, strategy=strategy, hook=target_hook)
+            obs_res = run_single_hook(seed=seed, strategy=strategy, hook=target_hook, operation=operation)
             if obs_res.verdict == "SAFE":
                 for h in range(1, 13):
-                    res = run_single_hook(seed=seed, strategy=strategy, hook=h)
+                    res = run_single_hook(seed=seed, strategy=strategy, hook=h, operation=operation)
                     if res.verdict == "BUG":
                         obs_res = res
                         target_hook = h
@@ -134,6 +139,7 @@ class AutonomousInvestigationAgent:
             "confidence": "LOW",
             "confidence_score": 0.20,
             "final_root_cause": "INVESTIGATION_IN_PROGRESS",
+            "_operation": operation,  # carry MySQL operation through state
         }
 
         experiment_count = 0
@@ -153,8 +159,8 @@ class AutonomousInvestigationAgent:
                 "details": selected_exp["reason"],
             })
 
-            # Execute Experiment via REAL Engine
-            exp_result = execute_experiment(selected_exp, seed=seed, strategy=strategy)
+            # Execute Experiment via REAL Engine (passes MySQL operation if available)
+            exp_result = execute_experiment(selected_exp, seed=seed, strategy=strategy, operation=operation)
             state["experiments"].append(exp_result)
 
             activity_log.append({

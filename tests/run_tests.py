@@ -2,7 +2,8 @@
 run_tests.py — Master Console Test Runner for KillPoint Engine.
 
 Runs Phase 1 (Core Engine & Invariants), Phase 2 (Edge Cases & Storage Failures),
-and Phase 3 (Autonomous Root-Cause Investigator Agent).
+Phase 3 (Autonomous Root-Cause Investigator Agent), and
+Phase 4 (MySQL Integration Tests).
 Exits with code 0 if all non-skipped tests pass, or code 1 if any test fails.
 """
 import sys
@@ -22,6 +23,7 @@ from tests.test_agent_fingerprint import run_fingerprint_tests
 from tests.test_agent_hypothesis import run_hypothesis_tests
 from tests.test_agent_experiments import run_experiment_tests
 from tests.test_agent import run_agent_tests
+from tests.test_mysql import run_mysql_tests
 
 
 def main():
@@ -65,24 +67,46 @@ def main():
     phase3_passed = p3_fp_ok and p3_hypo_ok and p3_exp_ok and p3_agent_ok
     p3_all_summary = p3_fp_sum + p3_hypo_sum + p3_exp_sum + p3_agent_sum
 
+    # ─── PHASE 4 ─────────────────────────────────────────────────────────────
+    print("\n\n" + "=" * 50)
+    print("[PHASE 4] MYSQL INTEGRATION TESTS")
+    print("=" * 50)
+
+    p4_ok, p4_summary = run_mysql_tests()
+    phase4_passed = p4_ok
+
     # Calculate statistics
     p2_all_summary = p2_edge_summary + p2_storage_summary
-    total_passed = sum(1 for _, st in p2_all_summary if st == "PASS") + sum(1 for _, st in p3_all_summary if st == "PASS") + 16  # 16 tests in Phase 1
-    total_failed = sum(1 for _, st in p2_all_summary if st == "FAIL") + sum(1 for _, st in p3_all_summary if st == "FAIL") + sum(1 for _, st in p1_results if not st)
-    total_skipped = sum(1 for _, st in p2_all_summary if st == "SKIP")
+    total_passed = (
+        sum(1 for _, st in p2_all_summary if st == "PASS") +
+        sum(1 for _, st in p3_all_summary if st == "PASS") +
+        sum(1 for _, st in p4_summary     if st == "PASS") +
+        16  # 16 tests in Phase 1
+    )
+    total_failed = (
+        sum(1 for _, st in p2_all_summary if st == "FAIL") +
+        sum(1 for _, st in p3_all_summary if st == "FAIL") +
+        sum(1 for _, st in p4_summary     if st == "FAIL") +
+        sum(1 for _, status in p1_results if not status)
+    )
+    total_skipped = (
+        sum(1 for _, st in p2_all_summary if st == "SKIP") +
+        sum(1 for _, st in p4_summary     if st == "SKIP")
+    )
 
     print("\n" + "=" * 50)
     print("FINAL TEST SUMMARY")
     print("=" * 50)
     print(f"Phase 1 Result : {'ALL PASSED' if phase1_passed else 'FAILED'}")
-    print(f"Phase 2 Result : {'ALL PASSED' if phase2_passed else 'FAILED'} ({total_skipped} SKIPPED)")
+    print(f"Phase 2 Result : {'ALL PASSED' if phase2_passed else 'FAILED'} ({sum(1 for _,st in p2_all_summary if st=='SKIP')} SKIPPED)")
     print(f"Phase 3 Result : {'ALL PASSED' if phase3_passed else 'FAILED'}")
+    print(f"Phase 4 Result : {'ALL PASSED (or SKIPPED)' if phase4_passed else 'FAILED'} ({sum(1 for _,st in p4_summary if st=='SKIP')} SKIPPED)")
     print(f"Total Passed   : {total_passed}")
     print(f"Total Failed   : {total_failed}")
     print(f"Total Skipped  : {total_skipped}")
     print("=" * 50)
 
-    if phase1_passed and phase2_passed and phase3_passed:
+    if phase1_passed and phase2_passed and phase3_passed and phase4_passed:
         print("ALL TESTS PASSED")
         print("=" * 50)
         sys.exit(0)
@@ -94,4 +118,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

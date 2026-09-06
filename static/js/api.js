@@ -67,14 +67,23 @@ async function _get(endpoint) {
 }
 
 export const API = {
-  health:          ()               => _get('/health'),
-  hooks:           ()               => _get('/hooks'),
-  login:           (username, password) => _post('/auth/login', { username, password }),
-  authStatus:      ()               => _get('/auth/status'),
-  auditLogs:       ()               => _get('/security/audit-logs'),
-  runAll:          (seed, strategy) => _post('/run-all',  { seed, strategy }),
-  compare:         (seed)           => _post('/compare',  { seed }),
-  reproduce:       (seed, hook, strategy) => _post('/reproduce', { seed, hook, strategy }),
-  investigate:     (seed, strategy, initial_hook) => _post('/agent/investigate', { seed, strategy, initial_hook }),
-};
+  health:            ()                               => _get('/health'),
+  hooks:             ()                               => _get('/hooks'),
+  login:             (username, password)             => _post('/auth/login', { username, password }),
+  authStatus:        ()                               => _get('/auth/status'),
+  auditLogs:         ()                               => _get('/security/audit-logs'),
 
+  // MySQL endpoints (public — no auth required)
+  mysqlStatus:       ()                               => _get('/mysql/status'),
+  mysqlTransactions: ()                               => _get('/mysql/transactions'),
+
+  // Verification — txn_id (MySQL runtime path) OR seed (test/fallback path)
+  runAll:     (txnId, strategy, seed = 48291)         => _post('/run-all',
+    txnId ? { txn_id: txnId, strategy } : { seed, strategy }),
+  compare:    (txnId, seed = 48291)                   => _post('/compare',
+    txnId ? { txn_id: txnId } : { seed }),
+  reproduce:  (txnId, hook, strategy, seed = 48291)   => _post('/reproduce',
+    txnId ? { txn_id: txnId, hook, strategy } : { seed, hook, strategy }),
+  investigate:(txnId, strategy, initial_hook, seed = 48291) => _post('/agent/investigate',
+    txnId ? { txn_id: txnId, strategy, initial_hook } : { seed, strategy, initial_hook }),
+};
